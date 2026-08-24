@@ -28,6 +28,17 @@ go get github.com/tigusigalpa/depthfeed-go
 
 Requires Go 1.22+.
 
+Before running an authenticated example, create an API key in DepthFeed and
+export it in your shell. Never commit the key or put it in a URL.
+
+```powershell
+$env:DEPTHFEED_API_KEY = "df_..."
+```
+
+```bash
+export DEPTHFEED_API_KEY='df_...'
+```
+
 ## Quick start
 
 ```go
@@ -66,6 +77,10 @@ func main() {
     fmt.Printf("%d markets, has_more=%v\n", len(markets), pg.HasMorePages())
 }
 ```
+
+`NewClient` may be used without a key when you only need public endpoints
+(`Health` and `Overview`). Any authenticated call made without a key fails
+locally with `depthfeed.ErrMissingAPIKey`, before an HTTP request is sent.
 
 ## Configuration
 
@@ -135,6 +150,12 @@ for {
     opts.Cursor = pg.NextCursor
 }
 ```
+
+For historical snapshots, ticks, and bars, keep concurrent page requests
+bounded. Prefer `limit=1000` where the endpoint supports it, a narrow time
+window, and the returned cursor. DepthFeed enforces separate historical-data
+concurrency limits, so aggressive parallel pagination is likely to be slower
+than a small worker pool.
 
 ## Error handling
 
@@ -213,6 +234,42 @@ Channel builders: `BookPolymarket`, `BookKalshi`, `BookLimitless`, `BookBinance`
 
 Close codes: `4001` (auth failed), `4003` (plan limit), `4029` (op flooding), `1013` (auth unavailable). Fatal codes (`4001`, `4003`) do not trigger reconnect.
 
+Always give `Connect` and `Receive` a context with a deadline or cancellation
+path, and call `Close` during application shutdown. The stream client restores
+active subscriptions after an unexpected reconnect; it does not reconnect
+after an explicit `Close`.
+
+## Sports odds SSE
+
+The sports odds feed is a long-lived Server-Sent Events connection. It lives
+in the small `sse` subpackage so applications that only need REST do not need
+to manage an always-on stream.
+
+```go
+import (
+    "os"
+
+    "github.com/tigusigalpa/depthfeed-go/sse"
+)
+
+odds := sse.NewClient(sse.Config{
+    URL:       "https://api.depthfeed.com/v3/sports/odds/stream",
+    APIKey:    os.Getenv("DEPTHFEED_API_KEY"),
+    Reconnect: true,
+})
+
+err := odds.Stream(ctx, func(event sse.Event) {
+    if event.Event != "odds" || !event.HasData() {
+        return
+    }
+    // event.Data is the exact JSON payload; event.ID is retained for reconnects.
+})
+```
+
+The client sends `Last-Event-ID` when it reconnects, parses multiline `data:`
+fields correctly, and never accumulates an unbounded event buffer. Call
+`odds.Close()` to stop it explicitly.
+
 ## Webhooks
 
 Verify Sports injury webhook deliveries using HMAC-SHA256 over the raw request body:
@@ -226,6 +283,12 @@ if !ok {
 ```
 
 See `examples/verify-webhook/` for a complete net/http receiver.
+
+Read the HTTP request body once, verify those exact bytes, then decode JSON.
+The signing secret returned while creating a subscription is shown only once;
+treat it like a password and do not log it. Paper Trading calls are not retried
+automatically: use a stable `PaperSignal.ClientID` if your application retries
+them after an ambiguous network failure.
 
 ## Examples
 
@@ -242,6 +305,14 @@ gofmt -l .
 ```
 
 Tests use a mock HTTP server and fake credentials (`df_test_example_not_a_real_key`). No real API calls are made.
+
+For a local quality check matching CI, run:
+
+```bash
+go mod verify
+go vet ./...
+go test -race ./...
+```
 
 ## Versioning
 

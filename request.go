@@ -20,8 +20,18 @@ const maxResponseBodyBytes = 10 << 20 // 10 MiB
 // decoded `data` payload; pagination receives the pagination block (may be
 // nil). requireAuth controls whether the API key is sent.
 func (c *Client) doRequest(ctx context.Context, method, path string, query url.Values, body any, result any, pagination **Pagination, requireAuth, allowRetry bool) (*ResponseMetadata, error) {
+	return c.doRequestTo(ctx, c.baseURL, method, path, query, body, result, pagination, requireAuth, allowRetry)
+}
+
+// doRequestTo is doRequest with an explicit base URL. It keeps requests to
+// endpoints outside /v3 (currently Paper Trading) independent from mutable
+// client state, so a Client remains safe for concurrent use.
+func (c *Client) doRequestTo(ctx context.Context, baseURL, method, path string, query url.Values, body any, result any, pagination **Pagination, requireAuth, allowRetry bool) (*ResponseMetadata, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if requireAuth && c.apiKey == "" {
+		return nil, ErrMissingAPIKey
 	}
 
 	// Build query string.
@@ -53,10 +63,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, query url.V
 
 	for attempt := 1; attempt <= retry.maxAttempts; attempt++ {
 		if attempt > 1 {
-			retryAfter := ""
-			if lastMeta != nil {
-				retryAfter = lastMeta.RetryAfter
-			}
+			retryAfter := retryAfterHint(lastErr, lastMeta)
 			delay := retry.delayForAttempt(attempt-2, retryAfter)
 			if retry.onRetry != nil {
 				retry.onRetry(attempt-1, delay, lastErr)
@@ -72,12 +79,15 @@ func (c *Client) doRequest(ctx context.Context, method, path string, query url.V
 			}
 		}
 
-		meta, err := c.attempt(ctx, method, endpoint, bodyBytes, requireAuth, result, pagination)
+		meta, err := c.attempt(ctx, baseURL, method, endpoint, bodyBytes, requireAuth, result, pagination)
 		if meta != nil {
 			meta.Attempts = attempt
 			meta.Duration = retry.clock.Now().Sub(start)
 		}
 		lastMeta, lastErr = meta, err
+		if apiErr := AsAPIError(err); apiErr != nil {
+			apiErr.Attempts = attempt
+		}
 		if err == nil {
 			return meta, nil
 		}
@@ -117,8 +127,8 @@ func shouldRetry(meta *ResponseMetadata, err error) bool {
 }
 
 // attempt performs a single HTTP round-trip and decodes the envelope.
-func (c *Client) attempt(ctx context.Context, method, endpoint string, bodyBytes []byte, requireAuth bool, result any, pagination **Pagination) (*ResponseMetadata, error) {
-	fullURL := c.baseURL + endpoint
+func (c *Client) attempt(ctx context.Context, baseURL, method, endpoint string, bodyBytes []byte, requireAuth bool, result any, pagination **Pagination) (*ResponseMetadata, error) {
+	fullURL := baseURL + endpoint
 
 	var reader io.Reader
 	if len(bodyBytes) > 0 {

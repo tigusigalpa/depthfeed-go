@@ -63,9 +63,9 @@ type Client struct {
 }
 
 // NewClient creates a new DepthFeed client from the given Config. Unset
-// fields fall back to safe defaults. Returns ErrMissingAPIKey if the key
-// is empty (public routes can still be reached via the Identity service
-// with an empty key, but all other routes require one).
+// fields fall back to safe defaults. A client may be created without an API
+// key to call public routes; authenticated operations return ErrMissingAPIKey
+// locally until a key is supplied.
 func NewClient(cfg Config, opts ...Option) (*Client, error) {
 	for _, opt := range opts {
 		opt(&cfg)
@@ -184,11 +184,7 @@ func (c *Client) postRetryable(ctx context.Context, path string, body any, out a
 // postNoAuth performs a POST without an API key (Paper Trading uses a
 // token in the path). Caller controls retry via allowRetry=false.
 func (c *Client) postNoAuth(ctx context.Context, baseURL, path string, body any, out any) (*ResponseMetadata, error) {
-	saved := c.baseURL
-	c.baseURL = baseURL
-	meta, err := c.doRequest(ctx, http.MethodPost, path, nil, body, out, nil, false, false)
-	c.baseURL = saved
-	return meta, err
+	return c.doRequestTo(ctx, baseURL, http.MethodPost, path, nil, body, out, nil, false, false)
 }
 
 // delete performs an authenticated DELETE. No automatic retry.

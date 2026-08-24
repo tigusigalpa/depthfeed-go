@@ -303,6 +303,76 @@ func TestRetryDoesNotRetryPermanentError(t *testing.T) {
 	}
 }
 
+func TestRetryHonorsDetailsRetryAfter(t *testing.T) {
+	srv := testutil.New()
+	defer srv.Close()
+	calls := 0
+	srv.Handle("GET", "/bars", func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			srv.ErrorResponse(w, http.StatusServiceUnavailable, "BARS_BUSY", "busy", map[string]any{"retry_after": 0.001})
+			return
+		}
+		srv.DataResponse(w, map[string]any{"series": []any{}}, nil)
+	})
+	c := newTestClient(t, srv.Start(), WithRetry(RetryConfig{
+		Enabled: true, MaxAttempts: 2, InitialDelay: time.Second, MaxDelay: time.Second,
+	}))
+
+	start := time.Now()
+	_, _, meta, err := c.Bars.Get(context.Background(), &BarsOptions{Symbols: "BTCUSDT"})
+	if err != nil {
+		t.Fatalf("Bars.Get: %v", err)
+	}
+	if meta.Attempts != 2 || calls != 2 {
+		t.Fatalf("attempts=%d calls=%d, want 2", meta.Attempts, calls)
+	}
+	if elapsed := time.Since(start); elapsed >= 100*time.Millisecond {
+		t.Fatalf("retry waited %v; details.retry_after was not honored", elapsed)
+	}
+}
+
+func TestAPIErrorReportsFinalAttemptCount(t *testing.T) {
+	srv := testutil.New()
+	defer srv.Close()
+	srv.HandleError("GET", "/whoami", http.StatusTooManyRequests, "RATE_LIMIT_BURST", "slow down", nil)
+	c := newTestClient(t, srv.Start(), WithRetry(RetryConfig{
+		Enabled: true, MaxAttempts: 3, InitialDelay: time.Millisecond, MaxDelay: time.Millisecond,
+	}))
+
+	_, _, err := c.Identity.WhoAmI(context.Background())
+	apiErr := AsAPIError(err)
+	if apiErr == nil {
+		t.Fatalf("expected APIError, got %v", err)
+	}
+	if apiErr.Attempts != 3 {
+		t.Fatalf("APIError.Attempts = %d, want 3", apiErr.Attempts)
+	}
+}
+
+func TestMetaTimeReturnsParseError(t *testing.T) {
+	_, err := (Meta{Timestamp: "not-a-timestamp"}).MetaTime()
+	if err == nil {
+		t.Fatal("MetaTime should return an invalid timestamp error")
+	}
+}
+
+func TestAuthenticatedRouteRequiresKeyLocally(t *testing.T) {
+	srv := testutil.New()
+	defer srv.Close()
+	c, err := NewClient(Config{BaseURL: srv.Start()})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	_, _, err = c.Identity.WhoAmI(context.Background())
+	if !errors.Is(err, ErrMissingAPIKey) {
+		t.Fatalf("WhoAmI error = %v, want ErrMissingAPIKey", err)
+	}
+	if len(srv.Requests()) != 0 {
+		t.Fatal("authenticated request should not be sent without a key")
+	}
+}
+
 func TestTimestampParsing(t *testing.T) {
 	cases := []struct {
 		in   string

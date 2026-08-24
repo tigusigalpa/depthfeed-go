@@ -19,10 +19,11 @@ func (m Meta) MetaTime() (time.Time, error) {
 	if m.Timestamp == "" {
 		return time.Time{}, nil
 	}
-	if ts, err := NewTimestamp(m.Timestamp); err == nil {
-		return ts.Time(), nil
+	ts, err := NewTimestamp(m.Timestamp)
+	if err != nil {
+		return time.Time{}, err
 	}
-	return time.Time{}, nil
+	return ts.Time(), nil
 }
 
 // Pagination is the keyset-cursor block present only on collection routes.

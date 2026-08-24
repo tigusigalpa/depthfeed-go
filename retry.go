@@ -57,8 +57,8 @@ func resolveRetry(r RetryConfig) retryState {
 // hint (seconds or HTTP-date) when provided.
 func (s retryState) delayForAttempt(attempt int, retryAfter string) time.Duration {
 	if retryAfter = strings.TrimSpace(retryAfter); retryAfter != "" {
-		if secs, err := strconv.Atoi(retryAfter); err == nil && secs >= 0 {
-			d := time.Duration(secs) * time.Second
+		if secs, err := strconv.ParseFloat(retryAfter, 64); err == nil && secs >= 0 {
+			d := time.Duration(secs * float64(time.Second))
 			if d > s.maxDelay {
 				d = s.maxDelay
 			}
@@ -81,6 +81,21 @@ func (s retryState) delayForAttempt(attempt int, retryAfter string) time.Duratio
 	}
 	jitter := time.Duration(rand.Int63n(int64(s.initialDelay) + 1))
 	return backoff + jitter
+}
+
+// retryAfterHint selects the API-provided retry hint. error.details.retry_after
+// takes precedence over the HTTP Retry-After header, as documented for
+// BARS_BUSY responses.
+func retryAfterHint(err error, meta *ResponseMetadata) string {
+	if apiErr := AsAPIError(err); apiErr != nil {
+		if secs, ok := apiErr.RetryAfterSeconds(); ok {
+			return strconv.FormatFloat(secs, 'f', -1, 64)
+		}
+	}
+	if meta != nil {
+		return meta.RetryAfter
+	}
+	return ""
 }
 
 // retryableHTTPStatus reports whether a bare HTTP status (no parsed code)
