@@ -2,6 +2,7 @@ package sse
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,7 +28,10 @@ func TestParseSSE(t *testing.T) {
 	)
 	var events []Event
 	var lastID string
-	err := parseSSE(body, func(e Event) { events = append(events, e) }, &lastID)
+	var retryDelay time.Duration
+	err := parseSSE(body, func(e Event) { events = append(events, e) }, &lastID, func(delay time.Duration) {
+		retryDelay = delay
+	})
 	if err == nil {
 		t.Fatalf("expected EOF, got nil")
 	}
@@ -45,6 +49,28 @@ func TestParseSSE(t *testing.T) {
 	}
 	if lastID != "2" {
 		t.Errorf("lastID = %q, want 2", lastID)
+	}
+	if retryDelay != time.Second {
+		t.Errorf("retry delay = %v, want 1s", retryDelay)
+	}
+}
+
+func TestParseSSEEmptyIDResetsLastEventID(t *testing.T) {
+	lastID := "previous"
+	err := parseSSE(strings.NewReader("id:\n\n"), nil, &lastID, nil)
+	if err != io.EOF {
+		t.Fatalf("parseSSE error = %v, want EOF", err)
+	}
+	if lastID != "" {
+		t.Errorf("lastID = %q, want empty", lastID)
+	}
+}
+
+func TestServerRetryHintControlsReconnectDelay(t *testing.T) {
+	c := NewClient(Config{InitialBackoff: time.Second, MaxBackoff: 10 * time.Second})
+	c.setRetryDelay(1500 * time.Millisecond)
+	if got := c.backoff(4); got != 1500*time.Millisecond {
+		t.Errorf("backoff = %v, want 1.5s server retry hint", got)
 	}
 }
 

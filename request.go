@@ -68,13 +68,8 @@ func (c *Client) doRequestTo(ctx context.Context, baseURL, method, path string, 
 			if retry.onRetry != nil {
 				retry.onRetry(attempt-1, delay, lastErr)
 			}
-			select {
-			case <-ctx.Done():
-				return lastMeta, ctx.Err()
-			default:
-			}
-			retry.sleeper.Sleep(delay)
-			if err := ctx.Err(); err != nil {
+			c.logger.Logf("depthfeed: retrying request (attempt %d) in %s after: %v", attempt-1, delay, lastErr)
+			if err := sleepWithContext(ctx, retry.sleeper, delay); err != nil {
 				return lastMeta, err
 			}
 		}
@@ -101,6 +96,36 @@ func (c *Client) doRequestTo(ctx context.Context, baseURL, method, path string, 
 	}
 
 	return lastMeta, lastErr
+}
+
+// sleepWithContext makes the built-in retry wait interruptible. Existing
+// custom Sleeper implementations remain supported; they may additionally
+// implement SleepContext for the same cancellation behavior.
+func sleepWithContext(ctx context.Context, sleeper Sleeper, delay time.Duration) error {
+	if contextSleeper, ok := sleeper.(interface {
+		SleepContext(context.Context, time.Duration) error
+	}); ok {
+		return contextSleeper.SleepContext(ctx, delay)
+	}
+	if _, ok := sleeper.(SystemSleeper); ok {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return nil
+		}
+	}
+	// Preserve the original custom Sleeper contract for test doubles and
+	// integrations created before context-aware sleeping was available.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	sleeper.Sleep(delay)
+	return ctx.Err()
 }
 
 // shouldRetry decides whether a failed attempt should be retried.

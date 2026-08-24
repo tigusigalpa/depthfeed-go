@@ -109,20 +109,40 @@ func Price(coin string) string {
 // ValidateChannel reports whether a channel name is well-formed
 // (non-empty, known prefix). It does NOT check plan entitlements.
 func ValidateChannel(ch string) bool {
-	if ch == "" {
+	parts := strings.Split(ch, ":")
+	validParts := func(values ...string) bool {
+		for _, value := range values {
+			if value == "" || strings.ContainsAny(value, " \t\r\n:") {
+				return false
+			}
+		}
+		return true
+	}
+	validCoin := func(coin string) bool {
+		switch coin {
+		case "btc", "eth", "sol", "xrp", "doge", "bnb", "hype":
+			return true
+		default:
+			return false
+		}
+	}
+	if !validParts(parts...) {
 		return false
 	}
 	switch {
-	case strings.HasPrefix(ch, "book:polymarket:"),
-		strings.HasPrefix(ch, "book:kalshi:"),
-		strings.HasPrefix(ch, "book:limitless:"),
-		strings.HasPrefix(ch, "book:binance:"),
-		strings.HasPrefix(ch, "book:sports:polymarket:"),
-		strings.HasPrefix(ch, "book:sports:kalshi:"),
-		strings.HasPrefix(ch, "price:"):
+	case len(parts) == 4 && parts[0] == "book" &&
+		(parts[1] == "polymarket" || parts[1] == "kalshi" || parts[1] == "limitless"):
+		return validCoin(parts[2])
+	case len(parts) == 4 && parts[0] == "book" && parts[1] == "binance":
+		return validCoin(parts[2]) && (parts[3] == "spot" || parts[3] == "futures")
+	case len(parts) == 4 && parts[0] == "book" && parts[1] == "sports" &&
+		(parts[2] == "polymarket" || parts[2] == "kalshi"):
 		return true
+	case len(parts) == 2 && parts[0] == "price":
+		return validCoin(parts[1])
+	default:
+		return false
 	}
-	return false
 }
 
 // SubscribeMessage builds a subscribe op JSON message.

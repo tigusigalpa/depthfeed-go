@@ -105,8 +105,8 @@ type SystemClock struct{}
 // Now returns time.Now().
 func (SystemClock) Now() time.Time { return time.Now() }
 
-// Sleeper sleeps for a duration, respecting context cancellation.
-// Injectable for testing.
+// Sleeper sleeps for a duration. It is injectable for testing.
+// The built-in sleeper is interruptible through the request context.
 type Sleeper interface {
 	Sleep(d time.Duration)
 }

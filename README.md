@@ -1,6 +1,8 @@
-# depthfeed-go
+# DepthFeed Golang SDK
 
 An idiomatic Go client for the [DepthFeed v3 API](https://depthfeed.com/docs) — REST, WebSocket, and SSE coverage for prediction-market order books, price bars, sports data, and Paper Trading.
+
+![DepthFeed Golang API SDK](https://i.postimg.cc/SKtvb0Rg/depthfeed-golang-api.jpg)
 
 [![CI](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/ci.yml/badge.svg)](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/tigusigalpa/depthfeed-go.svg)](https://pkg.go.dev/github.com/tigusigalpa/depthfeed-go)

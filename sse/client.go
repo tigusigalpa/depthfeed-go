@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -93,11 +94,13 @@ func WithMaxReconnectAttempts(n int) Option { return func(c *Config) { c.MaxReco
 
 // Client is a DepthFeed sports odds SSE client.
 type Client struct {
-	cfg    Config
-	mu     sync.Mutex
-	closed bool
-	cancel context.CancelFunc
-	lastID string
+	cfg           Config
+	mu            sync.Mutex
+	closed        bool
+	cancel        context.CancelFunc
+	lastID        string
+	retryDelay    time.Duration
+	hasRetryDelay bool
 }
 
 // NewClient creates a new SSE client. The stream is NOT opened; call Stream.
@@ -185,31 +188,35 @@ func (c *Client) streamOnce(ctx context.Context, onEvent func(Event)) error {
 		return fmt.Errorf("sse: unexpected status %d", resp.StatusCode)
 	}
 
-	return parseSSE(resp.Body, onEvent, &c.lastID)
+	return parseSSE(resp.Body, onEvent, &c.lastID, c.setRetryDelay)
 }
 
 // parseSSE reads SSE events from r, calling onEvent for each complete
 // event (blank line dispatch). Comments (lines starting with ':') are
 // ignored. Multiline data: fields are joined with "\n".
-func parseSSE(r io.Reader, onEvent func(Event), lastID *string) error {
+func parseSSE(r io.Reader, onEvent func(Event), lastID *string, onRetry func(time.Duration)) error {
 	scanner := bufio.NewScanner(r)
 	// Allow long lines.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var ev Event
 	var dataLines []string
+	var hasID bool
 
 	dispatch := func() {
 		if len(dataLines) > 0 {
 			ev.Data = strings.Join(dataLines, "\n")
 		}
 		if ev.HasData() || ev.Event != "" || ev.ID != "" {
-			onEvent(ev)
+			if onEvent != nil {
+				onEvent(ev)
+			}
 		}
-		if ev.ID != "" {
+		if hasID {
 			*lastID = ev.ID
 		}
 		ev = Event{}
 		dataLines = dataLines[:0]
+		hasID = false
 	}
 
 	for scanner.Scan() {
@@ -234,9 +241,13 @@ func parseSSE(r io.Reader, onEvent func(Event), lastID *string) error {
 			dataLines = append(dataLines, value)
 		case "id":
 			ev.ID = value
+			hasID = true
 		case "retry":
-			if n := parseIntSafe(value); n > 0 {
+			if n, ok := parseRetry(value); ok {
 				ev.Retry = n
+				if onRetry != nil {
+					onRetry(time.Duration(n) * time.Millisecond)
+				}
 			}
 		}
 	}
@@ -248,11 +259,31 @@ func parseSSE(r io.Reader, onEvent func(Event), lastID *string) error {
 }
 
 func (c *Client) backoff(attempt int) time.Duration {
+	c.mu.Lock()
+	retryDelay := c.retryDelay
+	hasRetryDelay := c.hasRetryDelay
+	c.mu.Unlock()
+	if hasRetryDelay {
+		return retryDelay
+	}
 	d := c.cfg.InitialBackoff << uint(attempt)
 	if d <= 0 || d > c.cfg.MaxBackoff {
 		d = c.cfg.MaxBackoff
 	}
 	return d
+}
+
+func (c *Client) setRetryDelay(delay time.Duration) {
+	if delay < 0 {
+		return
+	}
+	if delay > c.cfg.MaxBackoff {
+		delay = c.cfg.MaxBackoff
+	}
+	c.mu.Lock()
+	c.retryDelay = delay
+	c.hasRetryDelay = true
+	c.mu.Unlock()
 }
 
 func (c *Client) isClosed() bool {
@@ -272,13 +303,13 @@ func (c *Client) Close() {
 	}
 }
 
-func parseIntSafe(s string) int {
-	n := 0
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return 0
-		}
-		n = n*10 + int(r-'0')
+func parseRetry(s string) (int, bool) {
+	if s == "" {
+		return 0, false
 	}
-	return n
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
 }

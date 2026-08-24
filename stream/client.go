@@ -389,7 +389,11 @@ func (c *Client) reconnectLoop(ctx context.Context) error {
 		c.mu.Unlock()
 		if len(channels) > 0 {
 			msg, _ := SubscribeMessage(channels)
-			_ = c.write(msg)
+			if err := c.write(msg); err != nil {
+				err = fmt.Errorf("stream: restore subscriptions: %w", err)
+				c.emit(Event{Kind: EventError, Err: err})
+				return err
+			}
 		}
 		c.emit(Event{Kind: EventReconnected, Attempt: attempt})
 		return nil

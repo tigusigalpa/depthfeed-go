@@ -80,7 +80,11 @@ func (s retryState) delayForAttempt(attempt int, retryAfter string) time.Duratio
 		backoff = s.maxDelay
 	}
 	jitter := time.Duration(rand.Int63n(int64(s.initialDelay) + 1))
-	return backoff + jitter
+	delay := backoff + jitter
+	if delay > s.maxDelay {
+		return s.maxDelay
+	}
+	return delay
 }
 
 // retryAfterHint selects the API-provided retry hint. error.details.retry_after

@@ -210,7 +210,10 @@ func TestValidateChannel(t *testing.T) {
 			t.Errorf("ValidateChannel(%q) = false, want true", ch)
 		}
 	}
-	invalid := []string{"", "bogus", "book:unknown:x:y"}
+	invalid := []string{
+		"", "bogus", "book:unknown:x:y", "price:", "price:ada",
+		"book:binance:btc:margin", "book:polymarket:btc:", "book:sports:kalshi:a:b",
+	}
 	for _, ch := range invalid {
 		if ValidateChannel(ch) {
 			t.Errorf("ValidateChannel(%q) = true, want false", ch)

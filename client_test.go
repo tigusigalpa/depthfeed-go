@@ -350,6 +350,23 @@ func TestAPIErrorReportsFinalAttemptCount(t *testing.T) {
 	}
 }
 
+func TestRetryDelayNeverExceedsMaxDelay(t *testing.T) {
+	retry := resolveRetry(RetryConfig{Enabled: true, InitialDelay: 10 * time.Millisecond, MaxDelay: time.Millisecond})
+	for attempt := 0; attempt < 10; attempt++ {
+		if delay := retry.delayForAttempt(attempt, ""); delay > time.Millisecond {
+			t.Fatalf("delay for attempt %d = %v, exceeds max delay", attempt, delay)
+		}
+	}
+}
+
+func TestDefaultRetrySleepHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sleepWithContext(ctx, SystemSleeper{}, time.Second); !errors.Is(err, context.Canceled) {
+		t.Fatalf("sleepWithContext error = %v, want context.Canceled", err)
+	}
+}
+
 func TestMetaTimeReturnsParseError(t *testing.T) {
 	_, err := (Meta{Timestamp: "not-a-timestamp"}).MetaTime()
 	if err == nil {
