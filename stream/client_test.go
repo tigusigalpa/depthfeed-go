@@ -25,6 +25,8 @@ type wsMock struct {
 	onMessage func(c *websocket.Conn, msg string)
 	// onConnect is invoked once after a connection is upgraded.
 	onConnect func(c *websocket.Conn)
+	// onRequest receives the WebSocket handshake request before upgrade.
+	onRequest func(r *http.Request)
 }
 
 func newWSMock(onMessage func(*websocket.Conn, string)) *wsMock {
@@ -37,6 +39,9 @@ func newWSMock(onMessage func(*websocket.Conn, string)) *wsMock {
 }
 
 func (m *wsMock) handle(w http.ResponseWriter, r *http.Request) {
+	if m.onRequest != nil {
+		m.onRequest(r)
+	}
 	c, err := m.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -261,5 +266,81 @@ func TestFatalCloseNoReconnect(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "4001") {
 		t.Errorf("expected 4001 in error, got %v", err)
+	}
+}
+
+func TestClientUtilityAndAuthenticationBranches(t *testing.T) {
+	m := newWSMock(nil)
+	defer m.close()
+	var query, apiKey string
+	m.onRequest = func(r *http.Request) {
+		query = r.URL.Query().Get("api_key")
+		apiKey = r.Header.Get("X-API-Key")
+	}
+
+	c := NewClient(Config{APIKey: "df_test", URL: m.url()},
+		WithAuthMode(AuthQuery), WithUserAgent("test-agent"),
+		WithDialer(&websocket.Dialer{}), WithReconnect(false),
+		WithBackoff(time.Millisecond, 2*time.Millisecond), WithMaxReconnectAttempts(2))
+	if c.cfg.InitialBackoff != time.Millisecond || c.cfg.MaxReconnectAttempts != 2 {
+		t.Fatal("stream options were not applied")
+	}
+	if err := c.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	if query != "df_test" {
+		t.Fatalf("query auth key = %q", query)
+	}
+	if err := c.Subscribe(nil); err != nil || c.Unsubscribe(nil) != nil {
+		t.Fatal("empty subscription operation should be a no-op")
+	}
+	if err := c.Ping(); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if err := c.Close(); err != nil || c.Close() != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := c.Connect(context.Background()); err == nil {
+		t.Fatal("closed client should not connect")
+	}
+
+	headerClient := NewClient(Config{APIKey: "df_header", URL: m.url(), AuthMode: AuthHeader})
+	if err := headerClient.Connect(context.Background()); err != nil {
+		t.Fatalf("header Connect: %v", err)
+	}
+	defer headerClient.Close()
+	if apiKey != "df_header" {
+		t.Fatalf("header auth key = %q", apiKey)
+	}
+	if !hasQuery("wss://example.test/path?x=1") || hasQuery("wss://example.test/path") {
+		t.Fatal("hasQuery returned an unexpected value")
+	}
+}
+
+func TestReceiveUtilityBranches(t *testing.T) {
+	c := NewClient(Config{})
+	if _, err := c.Receive(context.Background()); err == nil {
+		t.Fatal("Receive should fail before Connect")
+	}
+	if _, err := c.ReceiveRaw(context.Background()); err == nil {
+		t.Fatal("ReceiveRaw should fail before Connect")
+	}
+	if err := c.Ping(); err == nil {
+		t.Fatal("Ping should fail before Connect")
+	}
+
+	m := newWSMock(nil)
+	m.onConnect = func(conn *websocket.Conn) {
+		_ = conn.WriteMessage(websocket.TextMessage, []byte("not-json"))
+	}
+	defer m.close()
+	c = NewClient(Config{APIKey: "df_test", URL: m.url(), Reconnect: false})
+	if err := c.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	defer c.Close()
+	frame, err := c.Receive(context.Background())
+	if err != nil || frame.Message != "not-json" || frame.Op != OpError {
+		t.Fatalf("unexpected fallback frame: %+v, %v", frame, err)
 	}
 }
