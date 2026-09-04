@@ -1,11 +1,17 @@
-# DepthFeed Golang SDK
+# DepthFeed Golang Client/SDK/Library
 
 An idiomatic Go client for the [DepthFeed v3 API](https://depthfeed.com/docs) — REST, WebSocket, and SSE coverage for prediction-market order books, price bars, sports data, and Paper Trading.
 
 ![DepthFeed Golang API SDK](https://i.postimg.cc/SKtvb0Rg/depthfeed-golang-api.jpg)
 
-[![CI](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/ci.yml/badge.svg)](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/ci.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/tigusigalpa/depthfeed-go.svg)](https://pkg.go.dev/github.com/tigusigalpa/depthfeed-go)
+[![CI](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/ci.yml)
+[![Tests](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/test.yml)
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)](https://golang.org/)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![CodeQL](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/tigusigalpa/depthfeed-go/actions/workflows/codeql.yml)
+[![Codecov](https://codecov.io/gh/tigusigalpa/depthfeed-go/graph/badge.svg)](https://codecov.io/gh/tigusigalpa/depthfeed-go)
+[![GitHub Release](https://img.shields.io/github/v/release/tigusigalpa/depthfeed-go?style=flat-square)](https://github.com/tigusigalpa/depthfeed-go/releases)
+[![GoDoc](https://img.shields.io/badge/godoc-reference-blue?style=flat-square&logo=go)](https://pkg.go.dev/github.com/tigusigalpa/depthfeed-go)
 
 ## Features
 
@@ -294,9 +300,9 @@ them after an ambiguous network failure.
 
 ## Examples
 
-- [`examples/markets/`](examples/markets/) — list markets and page through snapshots
-- [`examples/stream/`](examples/stream/) — subscribe to the live WebSocket book stream
-- [`examples/verify-webhook/`](examples/verify-webhook/) — verify a Sports injury webhook delivery
+- [`examples/markets/`](examples/markets) — list markets and page through snapshots
+- [`examples/stream/`](examples/stream) — subscribe to the live WebSocket book stream
+- [`examples/verify-webhook/`](examples/verify-webhook) — verify a Sports injury webhook delivery
 
 ## Testing
 
