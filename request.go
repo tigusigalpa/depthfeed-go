@@ -294,14 +294,3 @@ func pathEscape(s string) (string, error) {
 	}
 	return url.PathEscape(s), nil
 }
-
-// mustPath escapes a path segment, returning the escaped value and panicking
-// only in clearly-programmer-error cases. Not used by the public API; here
-// for tests that build known-good paths.
-func mustPath(s string) string {
-	out, err := pathEscape(s)
-	if err != nil {
-		panic(err)
-	}
-	return out
-}

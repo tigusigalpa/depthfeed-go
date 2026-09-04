@@ -231,9 +231,7 @@ func parseSSE(r io.Reader, onEvent func(Event), lastID *string, onRetry func(tim
 			continue // comment
 		}
 		field, value, _ := strings.Cut(line, ":")
-		if strings.HasPrefix(value, " ") {
-			value = value[1:]
-		}
+		value = strings.TrimPrefix(value, " ")
 		switch field {
 		case "event":
 			ev.Event = value

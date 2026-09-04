@@ -50,9 +50,7 @@ func VerifySportsInjury(rawBody []byte, signature, secret string) (bool, error) 
 		return false, ErrEmptySignature
 	}
 	// Strip an optional "sha256=" prefix.
-	if strings.HasPrefix(sig, "sha256=") {
-		sig = strings.TrimPrefix(sig, "sha256=")
-	}
+	sig = strings.TrimPrefix(sig, "sha256=")
 	expected, err := hex.DecodeString(sig)
 	if err != nil {
 		return false, errors.New("webhooks: signature is not valid hex")
@@ -75,9 +73,7 @@ func VerifyPaperFill(rawBody []byte, timestamp, signature, secret string) (bool,
 	if sig == "" {
 		return false, ErrEmptySignature
 	}
-	if strings.HasPrefix(sig, "sha256=") {
-		sig = strings.TrimPrefix(sig, "sha256=")
-	}
+	sig = strings.TrimPrefix(sig, "sha256=")
 	expected, err := hex.DecodeString(sig)
 	if err != nil {
 		return false, errors.New("webhooks: signature is not valid hex")

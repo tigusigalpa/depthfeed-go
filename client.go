@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/tigusigalpa/depthfeed-go/stream"
 )
@@ -192,23 +191,8 @@ func (c *Client) delete(ctx context.Context, path string, out any) (*ResponseMet
 	return c.doRequest(ctx, http.MethodDelete, path, nil, nil, out, nil, true, false)
 }
 
-// baseURLFor returns the REST base URL.
-func (c *Client) baseURLFor() string { return c.baseURL }
-
-// wsURL returns the WebSocket URL.
-func (c *Client) wsURL() string { return c.webSocketURL }
-
-// sseURL returns the SSE base URL.
-func (c *Client) sseURL() string { return c.sseBaseURL }
-
 // paperURL returns the Paper Trading base URL.
 func (c *Client) paperURL() string { return c.paperBaseURL }
-
-// key returns the API key (used by the stream subpackage via NewStreamClient).
-func (c *Client) key() string { return c.apiKey }
-
-// Ensure time is referenced (used in defaults).
-var _ = time.Second
 
 // NewStreamClient builds a live-stream WebSocket client wired to this
 // client's API key and WebSocket URL. The connection is not opened; call

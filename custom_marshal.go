@@ -89,9 +89,6 @@ func (m *Market) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// rawPreserve is a helper for types that only want to keep the raw object.
-type rawPreserve struct{}
-
 // preserveRaw unmarshals data into v and also stores a copy in *raw.
 func preserveRaw(data []byte, v any, raw *json.RawMessage) error {
 	*raw = append((*raw)[:0], data...)
